@@ -1,0 +1,96 @@
+###FIREWALL SETUP FOR ASSIGNMENT (iptables)
+
+##1. Create Firewall Script
+
+sudo nano /usr/local/sbin/firewall.sh
+
+#!/bin/bash
+
+Flush old rules
+
+iptables -F
+iptables -X
+
+Default policies
+
+iptables -P INPUT DROP
+iptables -P FORWARD DROP
+iptables -P OUTPUT ACCEPT
+
+Allow loopback
+
+iptables -A INPUT -i lo -j ACCEPT
+
+Allow established connections
+
+iptables -A INPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
+
+Allow SSH (22)
+
+iptables -A INPUT -p tcp --dport 22 -m conntrack --ctstate NEW -j LOG --log-prefix "SSH-ALLOW: "
+iptables -A INPUT -p tcp --dport 22 -m conntrack --ctstate NEW -j ACCEPT
+
+Allow HTTP (80)
+
+iptables -A INPUT -p tcp --dport 80 -m conntrack --ctstate NEW -j LOG --log-prefix "HTTP-ALLOW: "
+iptables -A INPUT -p tcp --dport 80 -m conntrack --ctstate NEW -j ACCEPT
+
+Allow HTTPS (443)
+
+iptables -A INPUT -p tcp --dport 443 -m conntrack --ctstate NEW -j LOG --log-prefix "HTTPS-ALLOW: "
+iptables -A INPUT -p tcp --dport 443 -m conntrack --ctstate NEW -j ACCEPT
+
+SYN flood protection
+
+iptables -A INPUT -p tcp --syn -m limit --limit 10/second --limit-burst 20 -j ACCEPT
+iptables -A INPUT -p tcp --syn -j LOG --log-prefix "SYN-FLOOD: "
+iptables -A INPUT -p tcp --syn -j DROP
+
+Drop invalid packets
+
+iptables -A INPUT -m conntrack --ctstate INVALID -j DROP
+
+Log and drop everything else
+
+iptables -A INPUT -j LOG --log-prefix "DROP: "
+iptables -A INPUT -j DROP
+
+Save and exit.
+
+Make Script Executable
+
+sudo chmod +x /usr/local/sbin/firewall.sh
+
+Test Firewall
+
+sudo /usr/local/sbin/firewall.sh
+
+Check rules:
+
+sudo iptables -L -v
+
+##2. Make Firewall Start at Boot (systemd)
+
+Create service:
+
+sudo nano /etc/systemd/system/firewall.service
+
+[Unit]
+Description=Custom Firewall
+After=network.target
+
+[Service]
+ExecStart=/usr/local/sbin/firewall.sh
+Type=oneshot
+RemainAfterExit=true
+
+[Install]
+WantedBy=multi-user.target
+
+Save and exit.
+
+##3. Enable it:
+
+sudo systemctl daemon-reload
+sudo systemctl enable firewall
+sudo systemctl start firewall
